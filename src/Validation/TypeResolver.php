@@ -96,8 +96,12 @@ final class TypeResolver
 
     public function evaluateLeaf(RuleTreeNode $node): Type\Type
     {
-        $types = array_values(array_filter(array_map(function ($rule) {
-            return $this->resolveType($rule);
+        $isNullable = !empty(array_filter(array_map(function ($rule) {
+            return $rule->getRuleName() === 'Nullable';
+        }, $node->getRules())));
+        
+        $types = array_values(array_filter(array_map(function ($rule) use ($isNullable) {
+            return $this->resolveType($rule, $isNullable);
         }, $node->getRules())));
 
         if (count($types) <= 0) {
@@ -110,11 +114,11 @@ final class TypeResolver
     /**
      * @see https://github.com/laravel/framework/blob/9.x/src/Illuminate/Validation/Concerns/ValidatesAttributes.php
      */
-    private function resolveType(Rule $rule): ?Type\Type
+    private function resolveType(Rule $rule, bool $nullable): ?Type\Type
     {
         // Currently unsupported: Enum, Present, RequiredArrayKeys
 
-        return match ($rule->getRuleName()) {
+        $rule = match ($rule->getRuleName()) {
             "Accepted", "AcceptedIf" => Type\TypeCombinator::union(
                 new ConstantStringType("yes"),
                 new ConstantStringType("on"),
@@ -202,6 +206,16 @@ final class TypeResolver
 
             default => $this->resolveDefault($rule),
         };
+
+        if ($nullable && $rule !== null) {
+            $rule = Type\TypeCombinator::union(
+                $rule,
+                new Type\NullType(),
+                new ConstantStringType(""),
+            );
+        }
+
+        return $rule;
     }
 
     private function resolveDefault(Rule $rule): Type\Type
