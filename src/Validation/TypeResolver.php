@@ -97,11 +97,24 @@ final class TypeResolver
     public function evaluateLeaf(RuleTreeNode $node): Type\Type
     {
         $isNullable = !empty(array_filter(array_map(function ($rule) {
-            return $rule->getRuleName() === 'Nullable';
+            return $ruleName === 'Nullable';
+        }, $node->getRules())));
+
+        $acceptNull = !empty(array_filter(array_map(function ($rule) {
+            $ruleName = $rule->getRuleName();
+            if ($ruleName === 'PHPStanType') {
+                /** @var \PHPStan\Type\Type */
+                $type = unserialize($rule->getParameters()[0]);
+
+                if ($type instanceof \PHPStan\Type\UnionType) {
+                    return $type->accepts(type: new \PHPStan\Type\NullType(), strictTypes: true)->yes();
+                }
+            }
+            return false;
         }, $node->getRules())));
         
-        $types = array_values(array_filter(array_map(function ($rule) use ($isNullable) {
-            return $this->resolveType($rule, $isNullable);
+        $types = array_values(array_filter(array_map(function ($rule) use ($isNullable, $acceptNull) {
+            return $this->resolveType($rule, $isNullable, $acceptNull);
         }, $node->getRules())));
 
         if (count($types) <= 0) {
@@ -114,7 +127,7 @@ final class TypeResolver
     /**
      * @see https://github.com/laravel/framework/blob/9.x/src/Illuminate/Validation/Concerns/ValidatesAttributes.php
      */
-    private function resolveType(Rule $rule, bool $nullable): ?Type\Type
+    private function resolveType(Rule $rule, bool $nullable, bool $acceptNull): ?Type\Type
     {
         // Currently unsupported: Enum, Present, RequiredArrayKeys
 
@@ -212,6 +225,12 @@ final class TypeResolver
                 $rule,
                 new Type\NullType(),
                 new ConstantStringType(""),
+            );
+        }
+        elseif ($acceptNull && $rule !== null) {
+            $rule = Type\TypeCombinator::union(
+                $rule,
+                new Type\NullType(),
             );
         }
 
