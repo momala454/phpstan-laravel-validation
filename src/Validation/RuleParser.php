@@ -36,11 +36,15 @@ final class RuleParser
         }
 
         foreach ($rules as $path => $ruleDef) {
-            if (!is_string($path)) {
+            // Laravel accepts numeric top-level rule keys (see
+            // ValidationValidatorTest::testNumericKeys); PHP coerces such keys
+            // to integers when used in array literals, so we re-coerce them to
+            // strings here to keep the path resolver simple.
+            if (!is_string($path) && !is_int($path)) {
                 throw new InvalidRuleException("Invalid rule path: " . var_export($path, true));
             }
 
-            $child = $node->resolvePath($path);
+            $child = $node->resolvePath((string) $path);
             $child->push(...self::explodeRules($ruleDef));
         }
 
@@ -112,7 +116,9 @@ final class RuleParser
 
             $parameters = match (strtolower($rule)) {
                 "regex", "not_regex", "notregex" => [$parameter],
-                default => str_getcsv($parameter),
+                // PHP 8.4 deprecates calls to str_getcsv() without the $escape
+                // argument; pass the historic default explicitly.
+                default => str_getcsv($parameter, escape: '\\'),
             };
         } else {
             $parameters = [];

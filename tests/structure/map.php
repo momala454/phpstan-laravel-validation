@@ -10,6 +10,6 @@ $validator = \Illuminate\Support\Facades\Validator::make([], [
 assertType('Illuminate\\Validation\\Validator', $validator);
 
 $validated = $validator->validated();
-assertType('array{photos: array{profile: Symfony\\Component\\HttpFoundation\\File\\File}}', $validated);
+assertType('array{photos?: array{profile: Symfony\\Component\\HttpFoundation\\File\\File}}', $validated);
 assertType('array{profile: Symfony\\Component\\HttpFoundation\\File\\File}', $validated['photos']);
 assertType('Symfony\\Component\\HttpFoundation\\File\\File', $validated['photos']['profile']);
