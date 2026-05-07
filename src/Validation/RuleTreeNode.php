@@ -173,11 +173,21 @@ final class RuleTreeNode implements IteratorAggregate, \Countable
             $childOptional = $child->resolveOptional();
             $isRequired = $isRequired || !$childOptional;
         }
-        // A parent that can legitimately be absent — because it is `nullable`, has
-        // `sometimes`, or has a conditional `exclude_*`/`accepted_if`/`declined_if`
-        // (all of which set `$sometimes`) — must not be forced back to required by
-        // its children: child `required` rules only apply once the parent is present.
-        $this->hasRequiredChild = $isRequired && !$this->nullable && !$this->sometimes;
+        // A parent that can legitimately be absent must not be forced back to
+        // required by its children — child `required` rules only apply once the
+        // parent is present. The parent can be absent when:
+        //  - it is `nullable`,
+        //  - it has `sometimes` (or any `exclude_*`/`accepted_if`/`declined_if`
+        //    rule, which all set `$sometimes`),
+        //  - it has no rules of its own (an implicit parent created only because
+        //    a descendant rule like `parent.child` was declared — Laravel does
+        //    not validate child rules when the parent is missing, see
+        //    testValidateImplicitEachWithAsterisksForRequiredNonExistingKey).
+        $hasOwnRule = count($this->rules) > 0;
+        $this->hasRequiredChild = $isRequired
+            && !$this->nullable
+            && !$this->sometimes
+            && $hasOwnRule;
         return $this->isOptional();
     }
 

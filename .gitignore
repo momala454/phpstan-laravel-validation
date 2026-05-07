@@ -8,3 +8,4 @@ result*
 /.pre-commit-config.yaml
 /coverage/
 /vendor/
+/laravel-framework/

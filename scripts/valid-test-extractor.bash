@@ -25,9 +25,11 @@ LARAVEL_PATH="${LARAVEL_PATH:-../laravel-framework}"
     LARAVEL_COMMIT=$(git log HEAD -n1 -q --pretty=format:"%h" --no-patch)
     export LARAVEL_COMMIT
 
+    # `--prepend` was removed in PHPUnit 10. Use `--bootstrap` instead, which
+    # works with PHPUnit 9, 10, and 11+.
     $PHP_WITH_UOPZ -d memory_limit=512M \
         ./vendor/bin/phpunit \
-        --prepend "$SCRIPT_PATH/valid-test-extractor.php" \
+        --bootstrap "$SCRIPT_PATH/valid-test-extractor.php" \
         tests/Validation/
 )
 

@@ -83,12 +83,15 @@ function all_tests(): ArrayObject
     return $allTests;
 }
 
-function revert_dot_placeholder(mixed $data, string $dotPlaceholder): mixed
+function revert_dot_placeholder(mixed $data, ?string $dotPlaceholder): mixed
 {
+    if ($dotPlaceholder === null) {
+        return $data;
+    }
     if (is_array($data)) {
         $newData = [];
         foreach ($data as $k => $v) {
-            $newKey = str_replace($dotPlaceholder, '\.', $k);
+            $newKey = is_string($k) ? str_replace($dotPlaceholder, '\.', $k) : $k;
             $newData[$newKey] = revert_dot_placeholder($v, $dotPlaceholder);
         }
         return $newData;
@@ -122,7 +125,16 @@ uopz_set_return(\Illuminate\Validation\Validator::class, 'passes', function () u
     $rules = $this->initialRules;
     $expandedRules = $this->getRules();
     $validated = $this->validated();
-    $dotPlaceholder = $this->dotPlaceholder;
+
+    // Laravel <11 exposes `$this->dotPlaceholder`; Laravel 11+ uses static `$placeholderHash`
+    // with `__dot__<hash>` / `__asterisk__<hash>` placeholders.
+    $reflection = new \ReflectionClass(\Illuminate\Validation\Validator::class);
+    if ($reflection->hasProperty('dotPlaceholder')) {
+        $dotPlaceholder = $this->dotPlaceholder;
+    } else {
+        $hash = $reflection->getStaticPropertyValue('placeholderHash');
+        $dotPlaceholder = $hash !== null ? '__dot__' . $hash : null;
+    }
 
     // extract the test name
     $bt = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
