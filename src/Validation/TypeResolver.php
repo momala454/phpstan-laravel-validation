@@ -97,7 +97,7 @@ final class TypeResolver
     public function evaluateLeaf(RuleTreeNode $node): Type\Type
     {
         $isNullable = !empty(array_filter(array_map(function ($rule) {
-            return $ruleName === 'Nullable';
+            return $rule->getRuleName() === 'Nullable';
         }, $node->getRules())));
 
         $acceptNull = !empty(array_filter(array_map(function ($rule) {

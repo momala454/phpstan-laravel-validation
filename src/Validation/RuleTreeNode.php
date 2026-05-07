@@ -173,10 +173,11 @@ final class RuleTreeNode implements IteratorAggregate, \Countable
             $childOptional = $child->resolveOptional();
             $isRequired = $isRequired || !$childOptional;
         }
-        // A nullable parent can be absent regardless of whether its children are required:
-        // child `required` rules are conditional on the parent being present and non-null,
-        // so they must not bubble up and force the parent to be required.
-        $this->hasRequiredChild = $isRequired && !$this->nullable;
+        // A parent that can legitimately be absent — because it is `nullable`, has
+        // `sometimes`, or has a conditional `exclude_*`/`accepted_if`/`declined_if`
+        // (all of which set `$sometimes`) — must not be forced back to required by
+        // its children: child `required` rules only apply once the parent is present.
+        $this->hasRequiredChild = $isRequired && !$this->nullable && !$this->sometimes;
         return $this->isOptional();
     }
 

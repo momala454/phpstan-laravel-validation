@@ -123,8 +123,15 @@ final class RuleParser
 
     public static function normalizeName(string $str): string
     {
-        return implode(array_map(function (string $word) {
+        $name = implode(array_map(function (string $word) {
             return ucfirst($word);
         }, explode(' ', str_replace(['-', '_'], ' ', $str))));
+
+        // Mirror \Illuminate\Validation\ValidationRuleParser::normalizeRule().
+        return match ($name) {
+            'Int' => 'Integer',
+            'Bool' => 'Boolean',
+            default => $name,
+        };
     }
 }
