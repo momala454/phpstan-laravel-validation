@@ -97,7 +97,11 @@ final class RuleTreeNode implements IteratorAggregate, \Countable
                 Rule::RULE_EXCLUDE_WITHOUT,
                 Rule::RULE_SOMETIMES => $this->sometimes = true,
 
-                Rule::RULE_NULLABLE => $this->nullable = $this->optional = true,
+                // `nullable` makes the value accept null. It only relaxes presence (sets
+                // optional=true) if `required` hasn't already been posted on this node —
+                // `['required', 'nullable']` means "key must be present, value may be null",
+                // not "key may be absent".
+                Rule::RULE_NULLABLE => $this->applyNullable(),
 
                 Rule::RULE_ARRAY => $this->isArray = true,
 
@@ -108,6 +112,17 @@ final class RuleTreeNode implements IteratorAggregate, \Countable
             $this->rules[] = $rule;
         }
         return $this;
+    }
+
+    private function applyNullable(): void
+    {
+        $this->nullable = true;
+        foreach ($this->rules as $rule) {
+            if ($rule->getRuleName() === Rule::RULE_REQUIRED) {
+                return;
+            }
+        }
+        $this->optional = true;
     }
 
     /**
@@ -155,9 +170,13 @@ final class RuleTreeNode implements IteratorAggregate, \Countable
 
         $isRequired = false;
         foreach ($this->children as $child) {
-            $isRequired = $isRequired || !$child->resolveOptional();
+            $childOptional = $child->resolveOptional();
+            $isRequired = $isRequired || !$childOptional;
         }
-        $this->hasRequiredChild = $isRequired;
+        // A nullable parent can be absent regardless of whether its children are required:
+        // child `required` rules are conditional on the parent being present and non-null,
+        // so they must not bubble up and force the parent to be required.
+        $this->hasRequiredChild = $isRequired && !$this->nullable;
         return $this->isOptional();
     }
 
