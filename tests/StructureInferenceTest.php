@@ -37,6 +37,7 @@ class StructureInferenceTest extends \PHPStan\Testing\TypeInferenceTestCase
         yield from $this->gatherAssertTypes(__DIR__ . '/structure/function.php');
         yield from $this->gatherAssertTypes(__DIR__ . '/structure/map.php');
         yield from $this->gatherAssertTypes(__DIR__ . '/structure/nullable-parent.php');
+        yield from $this->gatherAssertTypes(__DIR__ . '/structure/required-conditional.php');
         yield from $this->gatherAssertTypes(__DIR__ . '/structure/rule-class.php');
         yield from $this->gatherAssertTypes(__DIR__ . '/structure/sometimes-parent.php');
         yield from $this->gatherAssertTypes(__DIR__ . '/structure/readme.php');
