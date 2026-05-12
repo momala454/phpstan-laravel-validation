@@ -82,8 +82,22 @@ final class RuleTreeNode implements IteratorAggregate, \Countable
     {
         foreach ($rules as $rule) {
             match ($rule->getRuleName()) {
-                // These imply the node is not optional
+                // Plain `required` is unconditional.
                 Rule::RULE_REQUIRED => $this->optional = false,
+
+                // Conditional `required_*` rules: only treat the node as
+                // required when the predicate field is the node's *direct
+                // parent*. That's the pattern where the conditional reduces
+                // to "if parent is present, child must be present" (the
+                // shape `{parent?: {child: ...}}`). When the predicate field
+                // sits elsewhere in the tree we can't make a sound type-level
+                // claim, so we leave the node optional.
+                Rule::RULE_REQUIRED_IF,
+                Rule::RULE_REQUIRED_UNLESS,
+                Rule::RULE_REQUIRED_WITH,
+                Rule::RULE_REQUIRED_WITH_ALL,
+                Rule::RULE_REQUIRED_WITHOUT,
+                Rule::RULE_REQUIRED_WITHOUT_ALL => $this->maybeRequiredFromConditional($rule),
 
                 // This removes the node completely
                 Rule::RULE_EXCLUDE => $this->excluded = true,
@@ -114,13 +128,91 @@ final class RuleTreeNode implements IteratorAggregate, \Countable
         return $this;
     }
 
+    /**
+     * Decides whether a conditional `required_*` rule should mark this node
+     * as required from a type-inference perspective.
+     *
+     * The conditional variants reference another attribute by name:
+     *  - `required_with:other` / `required_with_all:other,other2`
+     *  - `required_without:other` / `required_without_all:other,other2`
+     *  - `required_if:other,value[,...]`
+     *  - `required_unless:other,value[,...]`
+     *
+     * Their semantics depend on a sibling, the parent, or any other attribute.
+     * We can only make a sound `optional = false` claim when the referenced
+     * field is the **direct parent** of this node — that pattern collapses
+     * to "if the parent exists, the child must exist", which is exactly
+     * what the inferred shape `{parent?: {child: ...}}` already encodes.
+     *
+     * For every other case (siblings, ancestors further up, unrelated
+     * paths) the rule remains a runtime-only enforcement and the type stays
+     * optional.
+     */
+    private function maybeRequiredFromConditional(Rule $rule): void
+    {
+        $parentPath = $this->parentPath();
+        if ($parentPath === null) {
+            return;
+        }
+        foreach ($this->referencedFields($rule) as $field) {
+            if ($field === $parentPath) {
+                $this->optional = false;
+                return;
+            }
+        }
+    }
+
+    private function parentPath(): ?string
+    {
+        $pos = strrpos($this->path, '.');
+        if ($pos === false) {
+            return null;
+        }
+        return substr($this->path, 0, $pos);
+    }
+
+    /**
+     * Extracts the attribute names this `required_*` rule references.
+     *
+     * `required_with` / `required_with_all` / `required_without` /
+     * `required_without_all` take a list of field names; `required_if` and
+     * `required_unless` take `field,value[,more_values...]` so only the
+     * first parameter is a field name.
+     *
+     * @return list<string>
+     */
+    private function referencedFields(Rule $rule): array
+    {
+        $params = $rule->getParameters();
+        if (count($params) === 0) {
+            return [];
+        }
+
+        $fields = match ($rule->getRuleName()) {
+            Rule::RULE_REQUIRED_IF, Rule::RULE_REQUIRED_UNLESS => [$params[0]],
+            Rule::RULE_REQUIRED_WITH,
+            Rule::RULE_REQUIRED_WITH_ALL,
+            Rule::RULE_REQUIRED_WITHOUT,
+            Rule::RULE_REQUIRED_WITHOUT_ALL => $params,
+            default => [],
+        };
+
+        return array_values(array_filter(
+            array_map(static fn($f) => is_string($f) ? $f : null, $fields),
+            static fn(?string $f): bool => $f !== null,
+        ));
+    }
+
     private function applyNullable(): void
     {
         $this->nullable = true;
-        foreach ($this->rules as $rule) {
-            if ($rule->getRuleName() === Rule::RULE_REQUIRED) {
-                return;
-            }
+        // Keep `optional=false` when a presence-implying rule has already
+        // been posted. We don't re-scan `$this->rules` here because
+        // conditional `required_*` variants only set `optional=false` when
+        // they target the direct parent — checking the flag directly is the
+        // single source of truth.
+        if ($this->optional === false) {
+            return;
         }
         $this->optional = true;
     }

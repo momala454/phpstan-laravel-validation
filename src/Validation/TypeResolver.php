@@ -220,18 +220,18 @@ final class TypeResolver
             default => $this->resolveDefault($rule),
         };
 
-        if ($nullable && $rule !== null) {
-            $rule = Type\TypeCombinator::union(
-                $rule,
-                new Type\NullType(),
-                new ConstantStringType(""),
-            );
-        }
-        elseif ($acceptNull && $rule !== null) {
-            $rule = Type\TypeCombinator::union(
-                $rule,
-                new Type\NullType(),
-            );
+        if (($nullable || $acceptNull) && $rule !== null) {
+            // Always allow null when the node is nullable (either via Laravel's
+            // `nullable` rule or because a custom PHPStanType rule explicitly
+            // includes null). Also include the empty string — Laravel passes
+            // present-but-empty values through type rules. BUT: if a custom
+            // PHPStanType is present, trust its precision (e.g. an explicit
+            // `non-empty-string|null`) and do not inject `''`, otherwise the
+            // intersect with later rules collapses the refined type into a
+            // looser `string`.
+            $rule = $acceptNull
+                ? Type\TypeCombinator::union($rule, new Type\NullType())
+                : Type\TypeCombinator::union($rule, new Type\NullType(), new ConstantStringType(""));
         }
 
         return $rule;
