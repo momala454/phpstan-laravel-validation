@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use jbboehr\PhpstanLaravelValidation\Test\Fixtures\Rules\NullableArrayValue;
+use jbboehr\PhpstanLaravelValidation\Test\Fixtures\Rules\NullableNonEmptyArrayValue;
 use jbboehr\PhpstanLaravelValidation\Test\Fixtures\Rules\NullableUint;
 use jbboehr\PhpstanLaravelValidation\Test\Fixtures\Rules\RequiredString;
 
@@ -44,5 +45,17 @@ $validated = \Illuminate\Support\Facades\Validator::make([], [
 ])->validated();
 assertType(
     'array{range?: array{start_date: non-empty-string, end_date: non-empty-string}|null}',
+    $validated,
+);
+
+// 5. Class rule whose `@phpstan-assert` constrains the container shape
+//    (`non-empty-array<...>|null`) must propagate the `non-empty-array`
+//    accessory to the inferred wildcard type, not collapse it to `array<...>`.
+$validated = \Illuminate\Support\Facades\Validator::make([], [
+    'tags'   => [new NullableNonEmptyArrayValue()],
+    'tags.*' => ['required_with:tags', 'string'],
+])->validated();
+assertType(
+    'array{tags?: non-empty-array<int|string, string>|null}',
     $validated,
 );
