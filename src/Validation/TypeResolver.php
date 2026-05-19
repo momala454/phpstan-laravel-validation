@@ -39,8 +39,10 @@ final class TypeResolver
     {
         if ($node->isWildcard()) {
             $type = $this->evaluateWildcard($node);
+            $type = $this->refineContainerWithPHPStanTypeRules($node, $type);
         } elseif ($node->hasChildren()) {
             $type = $this->evaluateMap($node);
+            $type = $this->refineContainerWithPHPStanTypeRules($node, $type);
         } else {
             $type = $this->evaluateLeaf($node);
         }
@@ -50,6 +52,34 @@ final class TypeResolver
         }
 
         return $type;
+    }
+
+    /**
+     * When a parent node carries a `PHPStanType` rule describing the container
+     * shape (e.g. `non-empty-array<mixed>` from a `TrueNullableNonEmptyArray`
+     * rule), intersect the built wildcard/map type with that constraint so
+     * accessory information (`non-empty-array`, custom key/value types) is not
+     * lost when children are resolved recursively. Null is stripped from the
+     * rule type — outer nullability is handled by `$node->isNullable()` in
+     * `evaluate()`.
+     */
+    private function refineContainerWithPHPStanTypeRules(RuleTreeNode $node, Type\Type $built): Type\Type
+    {
+        foreach ($node->getRules() as $rule) {
+            if ($rule->getRuleName() !== Rule::RULE_PHPSTANTYPE) {
+                continue;
+            }
+            $ruleType = unserialize($rule->getParameters()[0]);
+            if (!$ruleType instanceof Type\Type) {
+                continue;
+            }
+            $ruleType = Type\TypeCombinator::removeNull($ruleType);
+            if ($ruleType->isArray()->no()) {
+                continue;
+            }
+            $built = Type\TypeCombinator::intersect($built, $ruleType);
+        }
+        return $built;
     }
 
     public function evaluateMap(RuleTreeNode $node): Type\Type
