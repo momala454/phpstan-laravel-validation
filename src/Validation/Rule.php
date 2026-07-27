@@ -97,4 +97,40 @@ final class Rule
     {
         return $this->parameters;
     }
+
+    /**
+     * Builds the synthetic `PHPStanType:<payload>` rule string carrying an asserted type.
+     *
+     * The payload is base64 encoded rather than embedded raw: the rule travels as a plain
+     * string until `RuleParser::parseStringRule()` splits it back apart, and that parsing
+     * treats `|` and `,` as separators. A `serialize()` output can contain both, because
+     * PHPStan caches the rendered type description inside the type object itself (e.g.
+     * `int<0, 4294967295>|null`), which would truncate the payload and make it impossible
+     * to unserialize. The base64 alphabet contains none of those separators.
+     */
+    public static function encodePHPStanType(\PHPStan\Type\Type $type): string
+    {
+        return self::RULE_PHPSTANTYPE . ':' . base64_encode(serialize($type));
+    }
+
+    /**
+     * Decodes the type carried by a `PHPStanType` rule, or null when the parameter is not
+     * a payload produced by self::encodePHPStanType().
+     */
+    public function getPHPStanType(): ?\PHPStan\Type\Type
+    {
+        $parameter = $this->parameters[0] ?? null;
+        if (!is_string($parameter)) {
+            return null;
+        }
+
+        $serialized = base64_decode($parameter, true);
+        if ($serialized === false) {
+            return null;
+        }
+
+        $type = @unserialize($serialized);
+
+        return $type instanceof \PHPStan\Type\Type ? $type : null;
+    }
 }
