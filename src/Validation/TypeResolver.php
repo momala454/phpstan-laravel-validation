@@ -69,8 +69,8 @@ final class TypeResolver
             if ($rule->getRuleName() !== Rule::RULE_PHPSTANTYPE) {
                 continue;
             }
-            $ruleType = unserialize($rule->getParameters()[0]);
-            if (!$ruleType instanceof Type\Type) {
+            $ruleType = $rule->getPHPStanType();
+            if ($ruleType === null) {
                 continue;
             }
             $ruleType = Type\TypeCombinator::removeNull($ruleType);
@@ -133,8 +133,7 @@ final class TypeResolver
         $acceptNull = !empty(array_filter(array_map(function ($rule) {
             $ruleName = $rule->getRuleName();
             if ($ruleName === 'PHPStanType') {
-                /** @var \PHPStan\Type\Type */
-                $type = unserialize($rule->getParameters()[0]);
+                $type = $rule->getPHPStanType();
 
                 if ($type instanceof \PHPStan\Type\UnionType) {
                     return $type->accepts(type: new \PHPStan\Type\NullType(), strictTypes: true)->yes();
@@ -245,7 +244,7 @@ final class TypeResolver
 
             "In" => $this->resolveTypeIn($rule),
 
-            "PHPStanType" => unserialize($rule->getParameters()[0]),
+            "PHPStanType" => $rule->getPHPStanType(),
 
             default => $this->resolveDefault($rule),
         };

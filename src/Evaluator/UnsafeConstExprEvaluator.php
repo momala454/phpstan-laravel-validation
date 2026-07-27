@@ -20,6 +20,7 @@ declare(strict_types=1);
 
 namespace jbboehr\PhpstanLaravelValidation\Evaluator;
 
+use jbboehr\PhpstanLaravelValidation\Validation\Rule;
 use PhpParser\ConstExprEvaluationException;
 use PhpParser\ConstExprEvaluator;
 use PhpParser\Node\Expr;
@@ -101,7 +102,7 @@ class UnsafeConstExprEvaluator
                     }
                 }
                 if ($validAssert !== null) {
-                    return 'PHPStanType:' . serialize($validAssert->getType());
+                    return Rule::encodePHPStanType($validAssert->getType());
                 }
             }
         }
