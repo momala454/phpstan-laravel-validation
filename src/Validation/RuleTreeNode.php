@@ -35,6 +35,7 @@ final class RuleTreeNode implements IteratorAggregate, \Countable
     private bool $nullable = false;
     private bool $isArray = false;
     private bool $nullRejectedByPHPStanType = false;
+    private bool $nullNamedByPHPStanType = false;
 
     /**
      * @param string $path
@@ -205,17 +206,26 @@ final class RuleTreeNode implements IteratorAggregate, \Countable
     }
 
     /**
-     * Every rule of a node has to pass, so one PHPStanType rule rejecting null rejects it for
-     * the attribute, whatever the order the rules come in: a later rule accepting null — a
-     * length check asserting `mixed`, a `string|null` one — must not make it nullable again.
+     * Every rule of a node has to pass, so among PHPStanType rules one rejecting null rejects it
+     * for the attribute, whatever their order: a later one accepting null — a length check
+     * asserting `mixed`, a `string|null` one — must not make it nullable again.
+     *
+     * Laravel's own `nullable` rule is not reconciled here: it is still applied on its own by
+     * applyNullable(), although an implicit rule runs on null too and may reject it.
      */
     private function applyPHPStanType(Rule $rule): void
     {
-        if ($rule->getPHPStanType()?->isNull()->no() === true) {
+        $type = $rule->getPHPStanType();
+
+        if ($type?->isNull()->no() === true) {
             $this->nullRejectedByPHPStanType = true;
             $this->nullable = false;
             $this->optional = false;
             return;
+        }
+
+        if ($type instanceof \PHPStan\Type\UnionType && $type->accepts(type: new \PHPStan\Type\NullType(), strictTypes: true)->yes()) {
+            $this->nullNamedByPHPStanType = true;
         }
 
         if (!$this->nullRejectedByPHPStanType) {
@@ -223,9 +233,23 @@ final class RuleTreeNode implements IteratorAggregate, \Countable
         }
     }
 
-    public function rejectsNullByPHPStanType(): bool
+    /**
+     * Whether a PHPStanType rule on this node rejects null, in which case another one accepting
+     * null must not let it through.
+     */
+    public function hasNullRejectingPHPStanType(): bool
     {
         return $this->nullRejectedByPHPStanType;
+    }
+
+    /**
+     * Whether a PHPStanType rule on this node names null in a union (`non-empty-string|null`),
+     * as opposed to merely admitting it (`mixed`): such a rule's precision is trusted over the
+     * empty string Laravel's `nullable` would otherwise add.
+     */
+    public function hasNullNamingPHPStanType(): bool
+    {
+        return $this->nullNamedByPHPStanType;
     }
 
     private function applyNullable(): void
