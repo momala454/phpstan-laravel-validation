@@ -130,7 +130,8 @@ final class TypeResolver
             return $rule->getRuleName() === 'Nullable';
         }, $node->getRules())));
 
-        $acceptNull = !empty(array_filter(array_map(function ($rule) {
+        // A PHPStanType rule accepting null only lets null through when no other one on the node rejects it: every rule has to pass.
+        $acceptNull = !$node->rejectsNullByPHPStanType() && !empty(array_filter(array_map(function ($rule) {
             $ruleName = $rule->getRuleName();
             if ($ruleName === 'PHPStanType') {
                 $type = $rule->getPHPStanType();

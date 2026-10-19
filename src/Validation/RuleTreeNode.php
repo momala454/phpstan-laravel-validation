@@ -34,6 +34,7 @@ final class RuleTreeNode implements IteratorAggregate, \Countable
     private bool $hasRequiredChild = false;
     private bool $nullable = false;
     private bool $isArray = false;
+    private bool $nullRejectedByPHPStanType = false;
 
     /**
      * @param string $path
@@ -119,7 +120,7 @@ final class RuleTreeNode implements IteratorAggregate, \Countable
 
                 Rule::RULE_ARRAY => $this->isArray = true,
 
-                Rule::RULE_PHPSTANTYPE => ($rule->getPHPStanType()?->isNull()->no() === true ? $this->nullable = $this->optional = false : $this->nullable = true),
+                Rule::RULE_PHPSTANTYPE => $this->applyPHPStanType($rule),
 
                 default => null,
             };
@@ -201,6 +202,30 @@ final class RuleTreeNode implements IteratorAggregate, \Countable
             array_map(static fn($f) => is_string($f) ? $f : null, $fields),
             static fn(?string $f): bool => $f !== null,
         ));
+    }
+
+    /**
+     * Every rule of a node has to pass, so one PHPStanType rule rejecting null rejects it for
+     * the attribute, whatever the order the rules come in: a later rule accepting null — a
+     * length check asserting `mixed`, a `string|null` one — must not make it nullable again.
+     */
+    private function applyPHPStanType(Rule $rule): void
+    {
+        if ($rule->getPHPStanType()?->isNull()->no() === true) {
+            $this->nullRejectedByPHPStanType = true;
+            $this->nullable = false;
+            $this->optional = false;
+            return;
+        }
+
+        if (!$this->nullRejectedByPHPStanType) {
+            $this->nullable = true;
+        }
+    }
+
+    public function rejectsNullByPHPStanType(): bool
+    {
+        return $this->nullRejectedByPHPStanType;
     }
 
     private function applyNullable(): void
