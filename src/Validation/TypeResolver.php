@@ -130,20 +130,14 @@ final class TypeResolver
             return $rule->getRuleName() === 'Nullable';
         }, $node->getRules())));
 
-        $acceptNull = !empty(array_filter(array_map(function ($rule) {
-            $ruleName = $rule->getRuleName();
-            if ($ruleName === 'PHPStanType') {
-                $type = $rule->getPHPStanType();
+        // A PHPStanType rule naming null only adds null when no other
+        // PHPStanType rule on the node rejects it, as every rule has to pass.
+        // Its precision is trusted either way: see resolveType().
+        $trustPHPStanType = $node->hasNullNamingPHPStanType();
+        $acceptNull = $trustPHPStanType && !$node->hasNullRejectingPHPStanType();
 
-                if ($type instanceof \PHPStan\Type\UnionType) {
-                    return $type->accepts(type: new \PHPStan\Type\NullType(), strictTypes: true)->yes();
-                }
-            }
-            return false;
-        }, $node->getRules())));
-        
-        $types = array_values(array_filter(array_map(function ($rule) use ($isNullable, $acceptNull) {
-            return $this->resolveType($rule, $isNullable, $acceptNull);
+        $types = array_values(array_filter(array_map(function ($rule) use ($isNullable, $acceptNull, $trustPHPStanType) {
+            return $this->resolveType($rule, $isNullable, $acceptNull, $trustPHPStanType);
         }, $node->getRules())));
 
         if (count($types) <= 0) {
@@ -156,7 +150,7 @@ final class TypeResolver
     /**
      * @see https://github.com/laravel/framework/blob/9.x/src/Illuminate/Validation/Concerns/ValidatesAttributes.php
      */
-    private function resolveType(Rule $rule, bool $nullable, bool $acceptNull): ?Type\Type
+    private function resolveType(Rule $rule, bool $nullable, bool $acceptNull, bool $trustPHPStanType): ?Type\Type
     {
         // Currently unsupported: Enum, Present, RequiredArrayKeys
 
@@ -257,8 +251,9 @@ final class TypeResolver
             // PHPStanType is present, trust its precision (e.g. an explicit
             // `non-empty-string|null`) and do not inject `''`, otherwise the
             // intersect with later rules collapses the refined type into a
-            // looser `string`.
-            $rule = $acceptNull
+            // looser `string`. That holds even when another PHPStanType rule
+            // rejects null and only Laravel's `nullable` lets it through.
+            $rule = $trustPHPStanType
                 ? Type\TypeCombinator::union($rule, new Type\NullType())
                 : Type\TypeCombinator::union($rule, new Type\NullType(), new ConstantStringType(""));
         }

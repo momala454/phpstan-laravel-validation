@@ -2,9 +2,14 @@
 
 declare(strict_types=1);
 
+use jbboehr\PhpstanLaravelValidation\Test\Fixtures\Rules\AnyValueLength;
+use jbboehr\PhpstanLaravelValidation\Test\Fixtures\Rules\FilledValue;
 use jbboehr\PhpstanLaravelValidation\Test\Fixtures\Rules\NullableArrayValue;
 use jbboehr\PhpstanLaravelValidation\Test\Fixtures\Rules\NullableNonEmptyArrayValue;
+use jbboehr\PhpstanLaravelValidation\Test\Fixtures\Rules\NullableNonEmptyString;
+use jbboehr\PhpstanLaravelValidation\Test\Fixtures\Rules\NullableString;
 use jbboehr\PhpstanLaravelValidation\Test\Fixtures\Rules\NullableUint;
+use jbboehr\PhpstanLaravelValidation\Test\Fixtures\Rules\RequiredArrayValue;
 use jbboehr\PhpstanLaravelValidation\Test\Fixtures\Rules\RequiredString;
 
 use function PHPStan\Testing\assertType;
@@ -59,3 +64,77 @@ assertType(
     'array{tags?: non-empty-array<int|string, string>|null}',
     $validated,
 );
+
+// 6. Every rule of a node has to pass: one class rule rejecting null rejects it for the
+//    attribute, whatever the order, and a rule accepting null (a length check asserting
+//    mixed, a `string|null` one) placed after it must not make it nullable again.
+$validated = \Illuminate\Support\Facades\Validator::make([], [
+    'note' => [new RequiredString(), new AnyValueLength()],
+])->validated();
+assertType('array{note: string}', $validated);
+
+$validated = \Illuminate\Support\Facades\Validator::make([], [
+    'note' => [new AnyValueLength(), new RequiredString()],
+])->validated();
+assertType('array{note: string}', $validated);
+
+$validated = \Illuminate\Support\Facades\Validator::make([], [
+    'note' => [new RequiredString(), new NullableString()],
+])->validated();
+assertType('array{note: string}', $validated);
+
+$validated = \Illuminate\Support\Facades\Validator::make([], [
+    'note' => [new NullableString(), new RequiredString()],
+])->validated();
+assertType('array{note: string}', $validated);
+
+// 7. Rules that all accept null keep the attribute nullable.
+$validated = \Illuminate\Support\Facades\Validator::make([], [
+    'count' => [new NullableUint(), new AnyValueLength()],
+])->validated();
+assertType('array{count?: int<0, 4294967295>|null}', $validated);
+
+// 8. A rule asserting mixed on its own, or a mixed type that excludes null, behave as before.
+$validated = \Illuminate\Support\Facades\Validator::make([], [
+    'note' => [new AnyValueLength()],
+])->validated();
+assertType('array{note?: mixed}', $validated);
+
+$validated = \Illuminate\Support\Facades\Validator::make([], [
+    'note' => [new FilledValue()],
+])->validated();
+assertType('array{note: mixed~(0|0.0|\'\'|\'0\'|array{}|false|null)}', $validated);
+
+$validated = \Illuminate\Support\Facades\Validator::make([], [
+    'tags'   => [new AnyValueLength()],
+    'tags.*' => ['required', 'string'],
+])->validated();
+assertType('array{tags?: array<int|string, string>|null}', $validated);
+
+// 9. The rejection holds on every kind of node: a container, a wildcard child, under
+//    `sometimes`, and next to Laravel's `nullable` without losing a refined type.
+$validated = \Illuminate\Support\Facades\Validator::make([], [
+    'range'   => [new RequiredArrayValue(), new AnyValueLength()],
+    'range.x' => [new RequiredString()],
+])->validated();
+assertType('array{range: array{x: string}}', $validated);
+
+$validated = \Illuminate\Support\Facades\Validator::make([], [
+    'ids'   => [new NullableArrayValue()],
+    'ids.*' => [new RequiredString(), new AnyValueLength()],
+])->validated();
+assertType('array{ids?: array<int|string, string>|null}', $validated);
+
+$validated = \Illuminate\Support\Facades\Validator::make([], [
+    'note' => ['sometimes', new RequiredString(), new AnyValueLength()],
+])->validated();
+assertType('array{note?: string}', $validated);
+
+// Pins the current behaviour, not the runtime one: an implicit rule runs on null too, so
+// RequiredString rejects it and the real type is non-empty-string. Laravel's `nullable` is
+// not reconciled with the PHPStanType rules yet; what this guards is the refined type not
+// collapsing into string|null through an injected ''.
+$validated = \Illuminate\Support\Facades\Validator::make([], [
+    'note' => ['nullable', new NullableNonEmptyString(), new RequiredString()],
+])->validated();
+assertType('array{note: non-empty-string|null}', $validated);
